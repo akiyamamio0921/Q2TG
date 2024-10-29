@@ -1,0 +1,3 @@
+#!/command/with-contenv bash
+
+chown -R abc:abc "$DATA";

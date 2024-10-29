@@ -1,0 +1,3 @@
+#!/usr/bin/with-contenv bash
+exec cd /app
+exec s6-setuidgid abc node pnpm start
