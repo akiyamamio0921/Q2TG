@@ -102,13 +102,7 @@ export default class {
         let url: string;
         switch (elem.type) {
           case 'text': {
-            let tgs = lottie.getTgsIndex(elem.text);
-            if (tgs === -1) {
-              text += elem.text;
-            }
-            else {
-              useFile(`${tgs}.tgs`, `assets/tgs/tgs${tgs}.tgs`);
-            }
+            text += elem.text;
             break;
           }
           case 'at':

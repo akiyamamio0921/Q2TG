@@ -8,6 +8,7 @@ import { Pair } from '../models/Pair';
 import { consumer } from '../utils/highLevelFunces';
 import forwardHelper from '../helpers/forwardHelper';
 import flags from '../constants/flags';
+import posthog from '../models/posthog';
 
 export default class DeleteMessageService {
   private readonly log: Logger;
@@ -35,6 +36,7 @@ export default class DeleteMessageService {
     }
     catch (e) {
       this.log.error('撤回失败', e);
+      posthog.capture('撤回 QQ 消息失败', { error: e });
       if (noSendError) return;
       const tipMsg = await pair.tg.sendMessage({
         message: '<i>撤回 QQ 中对应的消息失败' +
@@ -82,6 +84,7 @@ export default class DeleteMessageService {
         }
         catch (e) {
           this.log.error(e);
+          posthog.capture('telegramDeleteMessage 出错', { error: e });
         }
       }
     }
@@ -122,6 +125,7 @@ export default class DeleteMessageService {
           await pair.tg.deleteMessages(message.replyToMsgId);
         }
         catch (e) {
+          posthog.capture('撤回 TG 消息失败', { error: e });
           await pair.tg.sendMessage(`<i>删除消息失败</i>：${e.message}`);
         }
       }
@@ -138,6 +142,7 @@ export default class DeleteMessageService {
       await message.delete({ revoke: true });
     }
     catch (e) {
+      posthog.capture('Bot 目前无法撤回其他用户的消息，Bot 需要「删除消息」权限', { error: e });
       const tipMsg = await message.reply({
         message: '<i>Bot 目前无法撤回其他用户的消息，Bot 需要「删除消息」权限</i>',
         silent: true,
@@ -174,6 +179,7 @@ export default class DeleteMessageService {
       }
     }
     catch (e) {
+      posthog.capture('处理 QQ 消息撤回失败', { error: e });
       this.log.error('处理 QQ 消息撤回失败', e);
     }
   }

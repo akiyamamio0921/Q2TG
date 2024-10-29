@@ -238,4 +238,10 @@ export default class Telegram {
       dcId: document.dcId,
     });
   }
+
+  public async getStickerSet(handle: string) {
+    return await this.client.invoke(new Api.messages.GetStickerSet({
+      stickerset: new Api.InputStickerSetShortName({ shortName: handle }),
+    })) as Api.messages.StickerSet;
+  }
 }

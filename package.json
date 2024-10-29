@@ -5,11 +5,13 @@
     "build": "pnpm run --stream --parallel build"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "typescript": "^5.5.3"
   },
   "pnpm": {
     "patchedDependencies": {
-      "@icqqjs/icqq@1.2.0": "patches/@icqqjs__icqq@1.2.0.patch"
+      "telegram@2.22.2": "patches/telegram@2.20.15.patch",
+      "@icqqjs/icqq@1.2.4": "patches/@icqqjs__icqq@1.2.4.patch"
     }
-  }
+  },
+  "packageManager": "pnpm@9.4.0+sha512.f549b8a52c9d2b8536762f99c0722205efc5af913e77835dbccc3b0b0b2ca9e7dc8022b78062c17291c48e88749c70ce88eb5a74f1fa8c4bf5e18bb46c8bd83a"
 }

@@ -6,6 +6,7 @@ import { FriendRequestEvent, GroupInviteEvent } from '@icqqjs/icqq';
 import { getAvatar } from '../utils/urls';
 import { CustomFile } from 'telegram/client/uploads';
 import { Button } from 'telegram/tl/custom/button';
+import posthog from '../models/posthog';
 
 export default class RequestController {
   private readonly log: Logger;
@@ -51,6 +52,7 @@ export default class RequestController {
             }
           }
           catch (e) {
+            posthog.capture('同意申请失败', { error: e });
             await message.edit({ text: `同意失败：${e.message}`, buttons: Button.clear() });
           }
           await message.edit({ text: '已同意请求', buttons: Button.clear() });
@@ -62,6 +64,7 @@ export default class RequestController {
             }
           }
           catch (e) {
+            posthog.capture('拒绝申请失败', { error: e });
             await message.edit({ text: `拒绝失败：${e.message}`, buttons: Button.clear() });
           }
           await message.edit({ text: '已拒绝请求', buttons: Button.clear() });

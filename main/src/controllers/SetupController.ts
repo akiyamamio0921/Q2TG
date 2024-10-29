@@ -10,6 +10,7 @@ import OicqClient from '../client/OicqClient';
 import { md5Hex } from '../utils/hashing';
 import Instance from '../models/Instance';
 import env from '../models/env';
+import posthog from '../models/posthog';
 
 export default class SetupController {
   private readonly setupService: SetupService;
@@ -50,6 +51,7 @@ export default class SetupController {
     }
     catch (e) {
       this.log.error('Claim Owner 失败', e);
+      posthog.capture('Claim Owner 失败', { error: e });
       this.isInProgress = false;
       throw e;
     }
@@ -68,6 +70,7 @@ export default class SetupController {
     }
     catch (e) {
       this.log.error('设置工作模式失败', e);
+      posthog.capture('设置工作模式失败', { error: e });
       this.isInProgress = false;
       throw e;
     }
@@ -136,6 +139,7 @@ export default class SetupController {
       }
       catch (e) {
         this.log.error('登录 OICQ 失败', e);
+        posthog.capture('登录 OICQ 失败', { error: e });
         await this.setupService.informOwner(`登录失败\n${e.message}`);
         this.isInProgress = false;
         throw e;
@@ -155,6 +159,7 @@ export default class SetupController {
       }
       catch (e) {
         this.log.error('创建 UserBot 失败', e);
+        posthog.capture('创建 UserBot 失败', { error: e });
         await this.setupService.informOwner(`登录失败\n${e.message}`);
         this.isInProgress = false;
         throw e;

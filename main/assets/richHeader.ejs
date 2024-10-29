@@ -97,7 +97,26 @@
             <span class="badge badge-<%= role %> <%= title && 'badge-hasTitle' %>"><%= title || role %></span>
             <%= name %>
         </div>
-        <div class="secondary"><%= userId %></div>
+        <% if(nickname !== name) { %>
+            <div class="secondary"><%= nickname %></div>
+        <% } %>
+        <div class="secondary"><%= userId %>
+            <% if(qid){ %>
+                <span style="padding-left: 1em">QID: <%= qid %></span>
+            <% } %>
+            <% if(email){ %>
+                <span style="padding-left: 1em"><%= email %></span>
+            <% } %>
+        </div>
+        <% if(location) { %>
+            <div class="secondary"><%= location %></div>
+        <% } %>
+        <% if(birthday) { %>
+            <div class="detailItem">
+                <div class="secondary">生日</div>
+                <%= birthday %>
+            </div>
+        <% } %>
         <div class="detailItem">
             <div class="secondary">加入时间</div>
             <%= joinTime %>
@@ -105,6 +124,10 @@
         <div class="detailItem">
             <div class="secondary">上次发言时间</div>
             <%= lastSentTime %>
+        </div>
+        <div class="detailItem">
+            <div class="secondary">注册时间</div>
+            <%= regTime %>
         </div>
     </div>
 </div>

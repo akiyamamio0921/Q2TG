@@ -46,5 +46,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            "REPO=${{ github.repository }}"
+            "REF=${{ github.ref }}"
+            "COMMIT=${{ github.sha }}"
           secrets: |
             "npmrc=//npm.pkg.github.com/:_authToken=${{ secrets.GPR_TOKEN }}"

@@ -2,11 +2,12 @@ import Telegram from '../client/Telegram';
 import OicqClient from '../client/OicqClient';
 import ForwardService from '../services/ForwardService';
 import {
+  FaceElem,
   Friend,
   FriendPokeEvent,
   GroupMessageEvent,
   GroupPokeEvent,
-  MemberIncreaseEvent,
+  MemberIncreaseEvent, MessageElem,
   PrivateMessageEvent,
 } from '@icqqjs/icqq';
 import db from '../models/db';
@@ -18,6 +19,7 @@ import { CustomFile } from 'telegram/client/uploads';
 import forwardHelper from '../helpers/forwardHelper';
 import helper from '../helpers/forwardHelper';
 import flags from '../constants/flags';
+import posthog from '../models/posthog';
 
 export default class ForwardController {
   private readonly forwardService: ForwardService;
@@ -42,6 +44,7 @@ export default class ForwardController {
   }
 
   private onQqMessage = async (event: PrivateMessageEvent | GroupMessageEvent) => {
+    this.log.debug('收到 QQ 消息', event);
     try {
       const target = event.message_type === 'private' ? event.friend : event.group;
       const pair = this.instance.forwardPairs.find(target);
@@ -64,25 +67,30 @@ export default class ForwardController {
       let { tgMessage, richHeaderUsed } = await this.forwardService.forwardFromQq(event, pair);
       if (!tgMessage) return;
       // 更新数据库
-      await db.message.create({
-        data: {
-          qqRoomId: pair.qqRoomId,
-          qqSenderId: event.sender.user_id,
-          time: event.time,
-          brief: event.raw_message,
-          seq: event.seq,
-          rand: event.rand,
-          pktnum: event.pktnum,
-          tgChatId: pair.tgId,
-          tgMsgId: tgMessage.id,
-          instanceId: this.instance.id,
-          tgMessageText: tgMessage.message,
-          tgFileId: forwardHelper.getMessageDocumentId(tgMessage),
-          nick: event.nickname,
-          tgSenderId: BigInt(this.tgBot.me.id.toString()),
-          richHeaderUsed,
-        },
-      });
+      // 库的类型有问题
+      let tgMessages = tgMessage as undefined as Api.Message[];
+      if (!Array.isArray(tgMessages)) tgMessages = [tgMessage];
+      for (const tgMessage of tgMessages) {
+        await db.message.create({
+          data: {
+            qqRoomId: pair.qqRoomId,
+            qqSenderId: event.sender.user_id,
+            time: event.time,
+            brief: event.raw_message,
+            seq: event.seq,
+            rand: event.rand,
+            pktnum: event.pktnum,
+            tgChatId: pair.tgId,
+            tgMsgId: tgMessage.id,
+            instanceId: this.instance.id,
+            tgMessageText: tgMessage.message,
+            tgFileId: forwardHelper.getMessageDocumentId(tgMessage),
+            nick: event.nickname,
+            tgSenderId: BigInt(this.tgBot.me.id.toString()),
+            richHeaderUsed,
+          },
+        });
+      }
       await this.forwardService.addToZinc(pair.dbId, tgMessage.id, {
         text: event.raw_message,
         nick: event.nickname,
@@ -90,6 +98,7 @@ export default class ForwardController {
     }
     catch (e) {
       this.log.error('处理 QQ 消息时遇到问题', e);
+      posthog.capture('处理 QQ 消息时遇到问题', { error: e });
     }
   };
 
@@ -138,6 +147,7 @@ export default class ForwardController {
     }
     catch (e) {
       this.log.error('处理 Telegram 消息时遇到问题', e);
+      posthog.capture('处理 Telegram 消息时遇到问题', { error: e });
     }
   };
 
@@ -154,6 +164,7 @@ export default class ForwardController {
     }
     catch (e) {
       this.log.error('处理 QQ 群成员增加事件时遇到问题', e);
+      posthog.capture('处理 QQ 群成员增加事件时遇到问题', { error: e });
     }
   };
 
@@ -172,6 +183,7 @@ export default class ForwardController {
     }
     catch (e) {
       this.log.error('处理 TG 群成员增加事件时遇到问题', e);
+      posthog.capture('处理 TG 群成员增加事件时遇到问题', { error: e });
     }
   };
 

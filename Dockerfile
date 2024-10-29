@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:labs
 
-FROM node:18-slim AS base
+FROM node:22-slim AS base
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -34,17 +34,19 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store,sharing=locked \
     pnpm deploy --filter=q2tg-main --prod deploy
 
 FROM debian:bookworm-slim AS tgs-to-gif-build
-ADD https://github.com/conan-io/conan/releases/download/1.61.0/conan-ubuntu-64.deb /tmp/conan.deb
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
   apt update && apt-get --no-install-recommends install -y \
-    python3 build-essential pkg-config cmake librlottie-dev zlib1g-dev /tmp/conan.deb
+    python3 build-essential pkg-config cmake librlottie-dev zlib1g-dev
+
+ADD https://github.com/p-ranav/argparse.git#v3.0 /argparse
+WORKDIR /argparse/build
+RUN cmake -DARGPARSE_BUILD_SAMPLES=on -DARGPARSE_BUILD_TESTS=on .. && make && make install
 
 ADD https://github.com/ed-asriyan/lottie-converter.git#f626548ced4492235b535552e2449be004a3a435 /app
 WORKDIR /app
-RUN sed -i 's@zlib/1.2.11@@g' conanfile.txt
-RUN conan install .
-RUN sed -i 's/\${CONAN_LIBS}/z/g' CMakeLists.txt
+RUN sed -i 's/\${CONAN_LIBS}/z/g' CMakeLists.txt && sed -i 's/include(conanbuildinfo.cmake)//g' CMakeLists.txt && sed -i 's/conan_basic_setup()//g' CMakeLists.txt
+
 RUN cmake CMakeLists.txt && make
 
 FROM base AS build-front
@@ -58,7 +60,7 @@ RUN cd ui && pnpm run build
 
 FROM base
 
-COPY --from=tgs-to-gif-build /app/bin/tgs_to_gif /usr/local/bin/tgs_to_gif
+COPY --from=tgs-to-gif-build /app/tgs_to_gif /usr/local/bin/tgs_to_gif
 ENV TGS_TO_GIF=/usr/local/bin/tgs_to_gif
 
 COPY main/assets /app/assets
@@ -70,5 +72,13 @@ COPY --from=build-front /app/ui/dist /app/front
 ENV UI_PATH=/app/front
 
 ENV DATA_DIR=/app/data
+
+ARG REPO
+ARG REF
+ARG COMMIT
+ENV REPO $REPO
+ENV REF $REF
+ENV COMMIT $COMMIT
+
 EXPOSE 8080
 CMD pnpm start

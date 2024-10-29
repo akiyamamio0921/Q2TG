@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Friend, Group } from '@icqqjs/icqq';
+import * as https from 'node:https';
 
 export function getAvatarUrl(room: number | bigint | Friend | Group): string {
   if (!room) return '';
@@ -22,9 +23,14 @@ export function getBigFaceUrl(file: string) {
   return `https://gxh.vip.qq.com/club/item/parcel/item/${file.substring(0, 2)}/${file.substring(0, 32)}/300x300.png`;
 }
 
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
+
 export async function fetchFile(url: string): Promise<Buffer> {
   const res = await axios.get(url, {
     responseType: 'arraybuffer',
+    httpsAgent,
   });
   return res.data;
 }
@@ -34,5 +40,5 @@ export function getAvatar(room: number | Friend | Group) {
 }
 
 export function isContainsUrl(msg: string): boolean {
-  return msg.includes("https://") || msg.includes("http://")
+  return msg.includes('https://') || msg.includes('http://');
 }

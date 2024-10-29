@@ -12,6 +12,7 @@ import { Friend, Group } from '@icqqjs/icqq';
 import { format } from 'date-and-time';
 import ZincSearch from 'zincsearch-node';
 import env from '../models/env';
+import posthog from '../models/posthog';
 
 export default class InChatCommandsService {
   private readonly log: Logger;
@@ -210,6 +211,7 @@ export default class InChatCommandsService {
       });
     }
     catch (e) {
+      posthog.capture('禁言请求出错', { error: e });
       await message.reply({
         message: `<i>错误</i>\n${e.message}`,
       });

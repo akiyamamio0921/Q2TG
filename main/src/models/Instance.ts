@@ -18,7 +18,6 @@ import RequestController from '../controllers/RequestController';
 import OicqErrorNotifyController from '../controllers/OicqErrorNotifyController';
 import { MarkupLike } from 'telegram/define';
 import { Button } from 'telegram/tl/custom/button';
-import { CustomFile } from 'telegram/client/uploads';
 import { QqBot } from '@prisma/client';
 import StatusReportController from '../controllers/StatusReportController';
 import HugController from '../controllers/HugController';
@@ -26,6 +25,7 @@ import QuotLyController from '../controllers/QuotLyController';
 import MiraiSkipFilterController from '../controllers/MiraiSkipFilterController';
 import env from './env';
 import AliveCheckController from '../controllers/AliveCheckController';
+import posthog from './posthog';
 
 export default class Instance {
   public static readonly instances: Instance[] = [];
@@ -148,7 +148,10 @@ export default class Instance {
       this.forwardPairs = await ForwardPairs.load(this.id, this.oicq, this.tgBot, this.tgUser);
       this.setupCommands()
         .then(() => this.log.info('命令设置成功'))
-        .catch(e => this.log.error('命令设置错误', e));
+        .catch(e => {
+          this.log.error('命令设置错误', e);
+          posthog.capture('命令设置错误', { error: e });
+        });
       if (this.id === 0) {
         this.instanceManageController = new InstanceManageController(this, this.tgBot);
       }

@@ -1,5 +1,6 @@
 import Telegram from '../client/Telegram';
 import {
+  FaceElem,
   Forwardable,
   Group,
   GroupMessageEvent,
@@ -45,11 +46,13 @@ import env from '../models/env';
 import { CustomFile } from 'telegram/client/uploads';
 import flags from '../constants/flags';
 import BigInteger from 'big-integer';
-import { Image } from '@icqqjs/icqq/lib/message';
 import probe from 'probe-image-size';
 import markdownEscape from 'markdown-escape';
+import pastebin from '../utils/pastebin';
+import posthog from '../models/posthog';
 
 const NOT_CHAINABLE_ELEMENTS = ['flash', 'record', 'video', 'location', 'share', 'json', 'xml', 'poke'];
+const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/apng', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff', 'image/x-icon', 'image/avif', 'image/heic', 'image/heif'];
 
 // noinspection FallThroughInSwitchStatementJS
 export default class ForwardService {
@@ -94,11 +97,43 @@ export default class ForwardService {
         });
       });
     }
+    this.initStickerPack().then(() => this.log.info('Sticker Pack 初始化完成'));
+  }
+
+  private readonly stickerPackMap: Record<keyof typeof lottie.packInfo, Api.Document[]> = {} as any;
+
+  private async initStickerPack() {
+    for (const handle of Object.keys(lottie.packInfo)) {
+      const pack = await this.tgBot.getStickerSet(handle);
+      this.stickerPackMap[handle] = pack.documents;
+    }
+  }
+
+  private getStickerByQQFaceId(id: number) {
+    for (const [pack, ids] of Object.entries(lottie.packInfo)) {
+      if (ids.includes(id as any)) {
+        if (this.stickerPackMap[pack])
+          return this.stickerPackMap[pack][ids.indexOf(id)] as Api.Document;
+      }
+    }
+  }
+
+  private getFaceByTgFileId(fileId: BigInteger.BigNumber): FaceElem | undefined {
+    for (const [pack, documents] of Object.entries(this.stickerPackMap)) {
+      for (const document of documents) {
+        if (document.id.eq(fileId))
+          return {
+            type: 'face',
+            id: lottie.packInfo[pack][documents.indexOf(document)],
+            stickerType: 1,
+          };
+      }
+    }
   }
 
   public async forwardFromQq(event: PrivateMessageEvent | GroupMessageEvent, pair: Pair) {
+    const tempFiles: FileResult[] = [];
     try {
-      const tempFiles: FileResult[] = [];
       let message = '',
         files: FileLike[] = [],
         buttons: ButtonLike[] = [],
@@ -129,7 +164,8 @@ export default class ForwardService {
             const messages = await pair.qq.getForwardMsg(resId);
             message = helper.generateForwardBrief(messages);
             const hash = md5Hex(resId);
-            buttons.push(Button.url('📃查看', `${env.CRV_API}/?hash=${hash}`));
+            const viewerUrl = env.CRV_VIEWER_APP ? `${env.CRV_VIEWER_APP}?startapp=${hash}` : `${env.CRV_API}/?hash=${hash}`;
+            buttons.push(Button.url('📃查看', viewerUrl));
             // 传到 Cloudflare
             axios.post(`${env.CRV_API}/add`, {
               auth: env.CRV_KEY,
@@ -137,9 +173,13 @@ export default class ForwardService {
               data: messages,
             })
               .then(data => this.log.trace('上传消息记录到 Cloudflare', data.data))
-              .catch(e => this.log.error('上传消息记录到 Cloudflare 失败', e));
+              .catch(e => {
+                this.log.error('上传消息记录到 Cloudflare 失败', e);
+                posthog.capture('上传消息记录到 Cloudflare 失败', { error: e });
+              });
           }
           catch (e) {
+            posthog.capture('转发多条消息（无法获取）', { error: e });
             message = '[<i>转发多条消息（无法获取）</i>]';
           }
         }
@@ -166,14 +206,7 @@ export default class ForwardService {
               instantViewUrl.searchParams.set('rhash', '45756f9b0bb3c6');
               message += `<a href="${instantViewUrl}">\u200e</a>`;
             }
-            // 判断 tgs 表情
-            let tgs = lottie.getTgsIndex(elem.text);
-            if (tgs === -1) {
-              message += helper.htmlEscape(elem.text);
-            }
-            else {
-              useSticker(`assets/tgs/tgs${tgs}.tgs`);
-            }
+            message += helper.htmlEscape(elem.text);
             break;
           }
           case 'at': {
@@ -185,7 +218,16 @@ export default class ForwardService {
             }
           }
           case 'face':
+            // 判断 tgs 表情
+            const tgs = this.getStickerByQQFaceId(elem.id as number);
+            if (tgs) {
+              useSticker(tgs);
+              break;
+            }
           case 'sface': {
+            if (!elem.text) {
+              elem.text = '表情:' + elem.id;
+            }
             message += `[<i>${helper.htmlEscape(elem.text)}</i>]`;
             break;
           }
@@ -221,6 +263,7 @@ export default class ForwardService {
             }
             catch (e) {
               this.log.error('下载媒体失败', e);
+              posthog.capture('下载媒体失败', { error: e });
               // 下载失败让 Telegram 服务器下载
               files.push(url);
             }
@@ -254,6 +297,7 @@ export default class ForwardService {
               }
               catch (e) {
                 this.log.error('下载媒体失败', e);
+                posthog.capture('下载媒体失败', { error: e });
                 // 下载失败让 Telegram 服务器下载
                 files.push(url);
               }
@@ -323,6 +367,7 @@ export default class ForwardService {
                 }
                 catch (e) {
                   this.log.error('下载媒体失败', e);
+                  posthog.capture('下载媒体失败', { error: e });
                   // 下载失败让 Telegram 服务器下载
                   files.push(getImageUrlByMd5(result.md5));
                 }
@@ -375,6 +420,7 @@ export default class ForwardService {
         }
         catch (e) {
           this.log.error('查找回复消息失败', e);
+          posthog.capture('查找回复消息失败', { error: e });
           message += '\n\n<i>*查找回复消息失败</i>';
         }
       }
@@ -428,6 +474,7 @@ export default class ForwardService {
         if (richHeaderUsed) {
           richHeaderUsed = false;
           this.log.warn('Rich Header 发送错误', messageToSend.file, e);
+          posthog.capture('Rich Header 发送错误', { error: e, attach: messageToSend.file });
           delete messageToSend.file;
           delete messageToSend.linkPreview;
           message = messageHeader + (message && messageHeader ? '\n' : '') + message;
@@ -457,18 +504,33 @@ export default class ForwardService {
       if (this.instance.workMode === 'personal' && event.message_type === 'group' && event.atall) {
         await tgMessage.pin({ notify: false });
       }
-
-      tempFiles.forEach(it => it.cleanup());
       return { tgMessage, richHeaderUsed };
     }
     catch (e) {
       this.log.error('从 QQ 到 TG 的消息转发失败', e);
+      posthog.capture('从 QQ 到 TG 的消息转发失败', { error: e });
+      let pbUrl: string;
       try {
-        this.instance.workMode === 'personal' && await pair.tg.sendMessage('<i>有一条来自 QQ 的消息转发失败</i>');
+        pbUrl = await pastebin.upload(JSON.stringify({
+          error: e,
+          event,
+        }));
+      }
+      catch (e) {
+        this.log.error('上传到 Pastebin 失败', e);
+      }
+      try {
+        this.instance.workMode === 'personal' && await pair.tg.sendMessage({
+          message: '<i>有一条来自 QQ 的消息转发失败</i>',
+          buttons: pbUrl ? [[Button.url('查看详情', pbUrl)]] : [],
+        });
       }
       catch {
       }
       return {};
+    }
+    finally {
+      tempFiles.forEach(it => it.cleanup());
     }
   }
 
@@ -489,7 +551,7 @@ export default class ForwardService {
       markdown.push(`![头像 #30px#30px](${helper.generateTelegramAvatarUrl(this.instance.id, senderId)}) **${messageHeader}**`);
       messageHeader += ': \n';
       if ((pair.flags | this.instance.flags) & flags.COLOR_EMOJI_PREFIX) {
-        messageHeader = emoji.tgColor((message.sender as Api.User)?.color || message.senderId.toJSNumber()) + messageHeader;
+        messageHeader = emoji.tgColor((message.sender as Api.User)?.color?.color || message.senderId.toJSNumber()) + messageHeader;
       }
 
       const useImage = (image: Buffer, asface: boolean) => {
@@ -515,7 +577,7 @@ export default class ForwardService {
 
       if (message.photo instanceof Api.Photo ||
         // stickers 和以文件发送的图片都是这个
-        message.document?.mimeType?.startsWith('image/')) {
+        IMAGE_MIMES.includes(message.document?.mimeType)) {
         if ('spoiler' in message.media && message.media.spoiler) {
           isSpoilerPhoto = true;
           const msgList: Forwardable[] = [{
@@ -580,8 +642,14 @@ export default class ForwardService {
       }
       else if (message.sticker) {
         // 一定是 tgs
-        const gifPath = await convert.tgs2gif(message.sticker.id.toString(16), () => message.downloadMedia({}));
-        useImage(await fsP.readFile(gifPath), true);
+        const face = this.getFaceByTgFileId(message.sticker.id);
+        if (face) {
+          chain.push(face);
+        }
+        else {
+          const gifPath = await convert.tgs2gif(message.sticker.id.toString(16), () => message.downloadMedia({}));
+          useImage(await fsP.readFile(gifPath), true);
+        }
         markdownCompatible = false;
         brief += '[贴纸]';
       }
@@ -705,10 +773,11 @@ export default class ForwardService {
 
       // 处理回复
       let source: Quotable;
-      if (message.replyToMsgId) {
+      if (message.replyToMsgId || message.replyTo) {
         markdownCompatible = false;
         try {
-          const quote = await db.message.findFirst({
+          console.log(message.replyTo);
+          const quote = message.replyToMsgId && await db.message.findFirst({
             where: {
               tgChatId: Number(pair.tg.id),
               tgMsgId: message.replyToMsgId,
@@ -717,7 +786,7 @@ export default class ForwardService {
           });
           if (quote) {
             source = {
-              message: quote.brief || ' ',
+              message: message.replyTo?.quoteText || quote.brief || ' ',
               seq: quote.seq,
               rand: Number(quote.rand),
               user_id: Number(quote.qqSenderId),
@@ -726,7 +795,7 @@ export default class ForwardService {
           }
           else {
             source = {
-              message: '回复消息找不到',
+              message: message.replyTo?.quoteText || '回复消息找不到',
               seq: 1,
               time: Math.floor(new Date().getTime() / 1000),
               rand: 1,
@@ -736,6 +805,7 @@ export default class ForwardService {
         }
         catch (e) {
           this.log.error('查找回复消息失败', e);
+          posthog.capture('查找回复消息失败', { error: e });
           source = {
             message: '查找回复消息失败',
             seq: 1,
@@ -782,6 +852,7 @@ export default class ForwardService {
         }
         catch (e) {
           this.log.error('使用 MapInstance 发送消息失败', e);
+          posthog.capture('使用 MapInstance 发送消息失败', { error: e });
         }
       }
 
@@ -828,6 +899,7 @@ export default class ForwardService {
     }
     catch (e) {
       this.log.error('从 TG 到 QQ 的消息转发失败', e);
+      posthog.capture('从 TG 到 QQ 的消息转发失败', { error: e });
       try {
         await message.reply({
           message: `<i>转发失败：${e.message}</i>`,

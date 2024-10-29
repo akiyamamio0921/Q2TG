@@ -3,6 +3,7 @@ import Instance from './models/Instance';
 import db from './models/db';
 import api from './api';
 import env from './models/env';
+import posthog from './models/posthog';
 
 (async () => {
   configure({
@@ -15,12 +16,9 @@ import env from './models/env';
   });
   const log = getLogger('Main');
 
-  if (!process.versions.node.startsWith('18.')) {
-    log.warn('当前正在使用的 Node.JS 版本为', process.versions.node, '，未经测试');
-  }
-
   process.on('unhandledRejection', error => {
     log.error('UnhandledException: ', error);
+    posthog.capture('UnhandledException', { error });
   });
 
   await api.startListening();
@@ -35,6 +33,8 @@ import env from './models/env';
       await Instance.start(instanceEntry.id);
     }
   }
+
+  posthog.capture('启动完成', { instanceCount: instanceEntries.length });
 
   setTimeout(async () => {
     for (const instance of Instance.instances.filter(it => it.workMode === 'group')) {

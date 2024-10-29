@@ -12,6 +12,7 @@ import TelegramChat from '../client/TelegramChat';
 import Instance from '../models/Instance';
 import getAboutText from '../utils/getAboutText';
 import random from '../utils/random';
+import posthog from '../models/posthog';
 
 const DEFAULT_FILTER_ID = 114; // 514
 
@@ -110,6 +111,7 @@ export default class ConfigService {
     catch (e) {
       avatar = null;
       this.log.error(`加载 ${group.group_name} (${gin}) 的头像失败`, e);
+      posthog.capture('加载头像失败', { error: e });
     }
     const message = `${group.group_name}\n${group.group_id}\n${group.member_count} 名成员`;
     await (await this.owner).sendMessage({
@@ -174,8 +176,8 @@ export default class ConfigService {
       // 添加到 Filter
       try {
         status && await status.edit({ text: '正在将群添加到文件夹…' });
-        const dialogFilters = await this.tgUser.getDialogFilters() as Api.DialogFilter[];
-        const filter = dialogFilters.find(e => e.id === DEFAULT_FILTER_ID);
+        const dialogFilters = await this.tgUser.getDialogFilters();
+        const filter = dialogFilters.filters.find(e => e instanceof Api.DialogFilter && e.id === DEFAULT_FILTER_ID) as Api.DialogFilter;
         if (filter) {
           filter.includePeers.push(utils.getInputPeer(chat));
           await this.tgUser.updateDialogFilter({
@@ -186,6 +188,7 @@ export default class ConfigService {
       }
       catch (e) {
         errorMessage += `\n添加到文件夹失败：${e.message}`;
+        posthog.capture('添加到文件夹失败', { error: e });
       }
 
       // 关闭【添加成员】快捷条
@@ -195,6 +198,7 @@ export default class ConfigService {
       }
       catch (e) {
         errorMessage += `\n关闭【添加成员】快捷条失败：${e.message}`;
+        posthog.capture('关闭【添加成员】快捷条失败', { error: e });
       }
 
       // 关联写入数据库
@@ -215,6 +219,7 @@ export default class ConfigService {
       }
       catch (e) {
         errorMessage += `\n更新头像失败：${e.message}`;
+        posthog.capture('更新头像失败', { error: e });
       }
 
       // 完成
@@ -229,6 +234,7 @@ export default class ConfigService {
     }
     catch (e) {
       this.log.error('创建群组并关联失败', e);
+      posthog.capture('创建群组并关联失败', { error: e });
       await (await this.owner).sendMessage(`创建群组并关联${isFinish ? '成功了但没完全成功' : '失败'}\n<code>${e}</code>`);
     }
   }
@@ -267,6 +273,7 @@ export default class ConfigService {
       }
       catch (e) {
         this.log.error(e);
+        posthog.capture('createLinkGroup 出错', { error: e });
         await (await this.owner).sendMessage(`错误：<code>${e}</code>`);
       }
     }
@@ -278,8 +285,8 @@ export default class ConfigService {
 
   // 创建 QQ 群组的文件夹
   public async setupFilter() {
-    const result = await this.tgUser.getDialogFilters() as Api.DialogFilter[];
-    let filter = result.find(e => e.id === DEFAULT_FILTER_ID);
+    const result = await this.tgUser.getDialogFilters();
+    let filter = result.filters.find(e => e instanceof Api.DialogFilter && e.id === DEFAULT_FILTER_ID);
     if (!filter) {
       this.log.info('创建 TG 文件夹');
       // 要自己计算新的 id，随意 id 也是可以的
@@ -308,6 +315,7 @@ export default class ConfigService {
       }
       catch (e) {
         this.log.error(errorText, e);
+        posthog.capture('设置文件夹失败', { error: e });
         await (await this.owner).sendMessage(errorText + `\n<code>${e}</code>`);
       }
     }

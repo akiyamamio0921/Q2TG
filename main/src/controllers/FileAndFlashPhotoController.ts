@@ -7,6 +7,7 @@ import { getLogger, Logger } from 'log4js';
 import { CustomFile } from 'telegram/client/uploads';
 import { fetchFile, getImageUrlByMd5 } from '../utils/urls';
 import Instance from '../models/Instance';
+import posthog from '../models/posthog';
 
 const REGEX = /^\/start (file|flash)-(\d+)$/;
 
@@ -46,6 +47,7 @@ export default class FileAndFlashPhotoController {
       });
     }
     catch (e) {
+      posthog.capture('获取文件下载地址失败', { error: e });
       this.log.error('获取文件下载地址失败', e);
       await message.reply({
         message: `获取文件下载地址失败：${e.message}\n${e}`,
@@ -75,6 +77,7 @@ export default class FileAndFlashPhotoController {
       });
     }
     catch (e) {
+      posthog.capture('获取闪照失败', { error: e });
       this.log.error('获取闪照失败', e);
       await message.reply({
         message: `获取闪照失败：${e.message}\n${e}`,

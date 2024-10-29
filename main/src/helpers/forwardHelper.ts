@@ -8,6 +8,7 @@ import { Api } from 'telegram';
 import { imageSize } from 'image-size';
 import env from '../models/env';
 import { md5Hex } from '../utils/hashing';
+import posthog from '../models/posthog';
 
 const log = getLogger('ForwardHelper');
 
@@ -70,6 +71,7 @@ export default {
       }
       catch (err) {
         log.error('解析群公告时出错', err);
+        posthog.capture('解析群公告时出错', { error: err });
         return { type: 'text', text: '[群公告]' };
       }
     }
@@ -85,6 +87,7 @@ export default {
         }
       }
       catch (err) {
+        posthog.capture('解析转发消息时出错', { error: err });
       }
     }
     let appurl: string;
