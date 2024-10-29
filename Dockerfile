@@ -63,10 +63,20 @@ FROM ghcr.io/linuxserver/baseimage-alpine:3.20
 
 # 安装必要的依赖
 RUN apk add --no-cache \
-    wqy-microhei \
-    libpixman libcairo pango libgif libjpeg-turbo libpng librsvg libvips ffmpeg librlottie nodejs pnpm
+pixman \
+cairo \
+pango \
+giflib \
+libjpeg-turbo \
+libpng \
+librsvg \
+vips \
+ffmpeg \
+nodejs \
+npm
+RUN npm uninstall -g yarn pnpm
+RUN npm install -g corepack
 RUN corepack enable
-
 WORKDIR /app
 
 # 拷贝 tgs_to_gif 的可执行文件
